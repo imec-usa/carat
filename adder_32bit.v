@@ -1,11 +1,7 @@
+`timescale 1ns/1ps
+
 // 32-bit Carry-Lookahead Adder (CLA)
-// High-performance adder using gate-level logic
-
-// Basic logic gates
-
-
-
-
+// Flattened for synthesis - no hierarchical modules
 
 module adder_32bit (
     input wire [31:0] a,
@@ -13,131 +9,127 @@ module adder_32bit (
     output wire [31:0] sum
 );
 
-    wire [31:0] p, g;  // Propagate and generate
-    wire [32:0] c;     // Carry chain
+    // Propagate and Generate signals
+    wire [31:0] p, g;
 
+    // Carry signals
+    wire [32:0] c;
     assign c[0] = 1'b0;
 
-    // Generate propagate and generate signals
-    genvar i;
-    generate
-        for (i = 0; i < 32; i = i + 1) begin : pg_gen
-            xor_gate xor_p (.a(a[i]), .b(b[i]), .out(p[i]));
-            and_gate and_g (.a(a[i]), .b(b[i]), .out(g[i]));
-        end
-    endgenerate
-
-    // 4-bit CLA blocks
+    // Block-level propagate and generate (8 blocks of 4 bits each)
     wire [7:0] block_p, block_g;
     wire [8:0] block_c;
+    assign block_c[0] = 1'b0;
 
-    assign block_c[0] = c[0];
+    // Generate P and G for all 32 bits
+    assign p = a ^ b;  // Propagate
+    assign g = a & b;  // Generate
 
-    generate
-        for (i = 0; i < 8; i = i + 1) begin : cla_blocks
-            cla_4bit cla_inst (
-                .p(p[i*4+3:i*4]),
-                .g(g[i*4+3:i*4]),
-                .c_in(block_c[i]),
-                .c_out(c[i*4+4:i*4+1]),
-                .block_p(block_p[i]),
-                .block_g(block_g[i])
-            );
-        end
-    endgenerate
-
-    // Second level CLA for block carries
-    cla_block_8 block_cla (
-        .p(block_p),
-        .g(block_g),
-        .c_in(block_c[0]),
-        .c_out(block_c[8:1])
-    );
-
-    // Generate final sum
-    generate
-        for (i = 0; i < 32; i = i + 1) begin : sum_gen
-            xor_gate xor_sum (.a(p[i]), .b(c[i]), .out(sum[i]));
-        end
-    endgenerate
-
-endmodule
-
-// 4-bit CLA block
-module cla_4bit (
-    input wire [3:0] p,
-    input wire [3:0] g,
-    input wire c_in,
-    output wire [4:1] c_out,
-    output wire block_p,
-    output wire block_g
-);
-
-    wire [3:0] c;
-    assign c[0] = c_in;
-
-    // Carry generation logic
-    wire g0, g1, g2;
-    wire p0_c0, p1_c1, p2_c2;
-
-    and_gate a1 (.a(p[0]), .b(c[0]), .out(p0_c0));
-    or_gate o1 (.a(g[0]), .b(p0_c0), .out(c[1]));
-
-    and_gate a2 (.a(p[1]), .b(c[1]), .out(p1_c1));
-    or_gate o2 (.a(g[1]), .b(p1_c1), .out(c[2]));
-
-    and_gate a3 (.a(p[2]), .b(c[2]), .out(p2_c2));
-    or_gate o3 (.a(g[2]), .b(p2_c2), .out(c[3]));
-
-    wire p3_c3;
-    and_gate a4 (.a(p[3]), .b(c[3]), .out(p3_c3));
-    or_gate o4 (.a(g[3]), .b(p3_c3), .out(c_out[4]));
-
-    assign c_out[3:1] = c[3:1];
+    // =========================================================================
+    // Block 0: bits [3:0]
+    // =========================================================================
+    // Carry chain
+    assign c[1] = g[0] | (p[0] & c[0]);
+    assign c[2] = g[1] | (p[1] & c[1]);
+    assign c[3] = g[2] | (p[2] & c[2]);
+    assign c[4] = g[3] | (p[3] & c[3]);
 
     // Block propagate and generate
-    wire p01, p012, p0123;
-    and_gate ap1 (.a(p[0]), .b(p[1]), .out(p01));
-    and_gate ap2 (.a(p01), .b(p[2]), .out(p012));
-    and_gate ap3 (.a(p012), .b(p[3]), .out(block_p));
+    assign block_p[0] = p[0] & p[1] & p[2] & p[3];
+    assign block_g[0] = g[3] | (p[3] & g[2]) | (p[3] & p[2] & g[1]) | (p[3] & p[2] & p[1] & g[0]);
 
-    // block_g = g[3] | (p[3] & g[2]) | (p[3] & p[2] & g[1]) | (p[3] & p[2] & p[1] & g[0])
-    wire p3_g2, p32, p3_p2_g1, p321, p3_p2_p1_g0;
-    wire bg1, bg2, bg3;
+    // =========================================================================
+    // Block 1: bits [7:4]
+    // =========================================================================
+    assign c[5] = g[4] | (p[4] & c[4]);
+    assign c[6] = g[5] | (p[5] & c[5]);
+    assign c[7] = g[6] | (p[6] & c[6]);
+    assign c[8] = g[7] | (p[7] & c[7]);
 
-    and_gate bg_a1 (.a(p[3]), .b(g[2]), .out(p3_g2));
-    and_gate bg_a2 (.a(p[3]), .b(p[2]), .out(p32));
-    and_gate bg_a3 (.a(p32), .b(g[1]), .out(p3_p2_g1));
-    and_gate bg_a4 (.a(p32), .b(p[1]), .out(p321));
-    and_gate bg_a5 (.a(p321), .b(g[0]), .out(p3_p2_p1_g0));
+    assign block_p[1] = p[4] & p[5] & p[6] & p[7];
+    assign block_g[1] = g[7] | (p[7] & g[6]) | (p[7] & p[6] & g[5]) | (p[7] & p[6] & p[5] & g[4]);
 
-    or_gate bg_o1 (.a(g[3]), .b(p3_g2), .out(bg1));
-    or_gate bg_o2 (.a(bg1), .b(p3_p2_g1), .out(bg2));
-    or_gate bg_o3 (.a(bg2), .b(p3_p2_p1_g0), .out(block_g));
+    // =========================================================================
+    // Block 2: bits [11:8]
+    // =========================================================================
+    assign c[9]  = g[8]  | (p[8]  & c[8]);
+    assign c[10] = g[9]  | (p[9]  & c[9]);
+    assign c[11] = g[10] | (p[10] & c[10]);
+    assign c[12] = g[11] | (p[11] & c[11]);
+
+    assign block_p[2] = p[8] & p[9] & p[10] & p[11];
+    assign block_g[2] = g[11] | (p[11] & g[10]) | (p[11] & p[10] & g[9]) | (p[11] & p[10] & p[9] & g[8]);
+
+    // =========================================================================
+    // Block 3: bits [15:12]
+    // =========================================================================
+    assign c[13] = g[12] | (p[12] & c[12]);
+    assign c[14] = g[13] | (p[13] & c[13]);
+    assign c[15] = g[14] | (p[14] & c[14]);
+    assign c[16] = g[15] | (p[15] & c[15]);
+
+    assign block_p[3] = p[12] & p[13] & p[14] & p[15];
+    assign block_g[3] = g[15] | (p[15] & g[14]) | (p[15] & p[14] & g[13]) | (p[15] & p[14] & p[13] & g[12]);
+
+    // =========================================================================
+    // Block 4: bits [19:16]
+    // =========================================================================
+    assign c[17] = g[16] | (p[16] & c[16]);
+    assign c[18] = g[17] | (p[17] & c[17]);
+    assign c[19] = g[18] | (p[18] & c[18]);
+    assign c[20] = g[19] | (p[19] & c[19]);
+
+    assign block_p[4] = p[16] & p[17] & p[18] & p[19];
+    assign block_g[4] = g[19] | (p[19] & g[18]) | (p[19] & p[18] & g[17]) | (p[19] & p[18] & p[17] & g[16]);
+
+    // =========================================================================
+    // Block 5: bits [23:20]
+    // =========================================================================
+    assign c[21] = g[20] | (p[20] & c[20]);
+    assign c[22] = g[21] | (p[21] & c[21]);
+    assign c[23] = g[22] | (p[22] & c[22]);
+    assign c[24] = g[23] | (p[23] & c[23]);
+
+    assign block_p[5] = p[20] & p[21] & p[22] & p[23];
+    assign block_g[5] = g[23] | (p[23] & g[22]) | (p[23] & p[22] & g[21]) | (p[23] & p[22] & p[21] & g[20]);
+
+    // =========================================================================
+    // Block 6: bits [27:24]
+    // =========================================================================
+    assign c[25] = g[24] | (p[24] & c[24]);
+    assign c[26] = g[25] | (p[25] & c[25]);
+    assign c[27] = g[26] | (p[26] & c[26]);
+    assign c[28] = g[27] | (p[27] & c[27]);
+
+    assign block_p[6] = p[24] & p[25] & p[26] & p[27];
+    assign block_g[6] = g[27] | (p[27] & g[26]) | (p[27] & p[26] & g[25]) | (p[27] & p[26] & p[25] & g[24]);
+
+    // =========================================================================
+    // Block 7: bits [31:28]
+    // =========================================================================
+    assign c[29] = g[28] | (p[28] & c[28]);
+    assign c[30] = g[29] | (p[29] & c[29]);
+    assign c[31] = g[30] | (p[30] & c[30]);
+    assign c[32] = g[31] | (p[31] & c[31]);
+
+    assign block_p[7] = p[28] & p[29] & p[30] & p[31];
+    assign block_g[7] = g[31] | (p[31] & g[30]) | (p[31] & p[30] & g[29]) | (p[31] & p[30] & p[29] & g[28]);
+
+    // =========================================================================
+    // Second-level carry lookahead (block carries)
+    // =========================================================================
+    assign block_c[1] = block_g[0] | (block_p[0] & block_c[0]);
+    assign block_c[2] = block_g[1] | (block_p[1] & block_c[1]);
+    assign block_c[3] = block_g[2] | (block_p[2] & block_c[2]);
+    assign block_c[4] = block_g[3] | (block_p[3] & block_c[3]);
+    assign block_c[5] = block_g[4] | (block_p[4] & block_c[4]);
+    assign block_c[6] = block_g[5] | (block_p[5] & block_c[5]);
+    assign block_c[7] = block_g[6] | (block_p[6] & block_c[6]);
+    assign block_c[8] = block_g[7] | (block_p[7] & block_c[7]);
+
+    // =========================================================================
+    // Final sum generation
+    // =========================================================================
+    assign sum = p ^ c[31:0];
 
 endmodule
-
-// 8-block CLA for second level
-module cla_block_8 (
-    input wire [7:0] p,
-    input wire [7:0] g,
-    input wire c_in,
-    output wire [8:1] c_out
-);
-
-    wire [8:0] c;
-    assign c[0] = c_in;
-
-    genvar i;
-    generate
-        for (i = 0; i < 8; i = i + 1) begin : carry_chain
-            wire p_c;
-            and_gate a (.a(p[i]), .b(c[i]), .out(p_c));
-            or_gate o (.a(g[i]), .b(p_c), .out(c[i+1]));
-        end
-    endgenerate
-
-    assign c_out = c[8:1];
-
-endmodule
-
